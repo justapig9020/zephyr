@@ -16,6 +16,7 @@
 config CPU_CORTEX_A7
 	bool
 	select CPU_AARCH32_CORTEX_A
+	select ARM_GENERIC_TIMER_CP15
 	select ARMV7_A
 	select CPU_HAS_ICACHE
 	select CPU_HAS_DCACHE
@@ -177,6 +178,7 @@ config ARMV7_R_FP
 config AARCH32_ARMV8_R
 	bool
 	select ATOMIC_OPERATIONS_BUILTIN
+	select ARM_GENERIC_TIMER_CP15
 	select SCHED_IPI_SUPPORTED if SMP
 	select ARCH_HAS_DIRECTED_IPIS
 	help
@@ -237,6 +239,14 @@ config ICACHE_LINE_SIZE
 	default 32
 
 endif # CPU_AARCH32_CORTEX_R
+
+config ARM_GENERIC_TIMER_CP15
+	bool
+	help
+	  This option selects the Arm Generic Timer CPU register access backend
+	  for AArch32 platforms. These platforms access the architected timer
+	  through CP15/system register instructions instead of a memory-mapped
+	  timer interface.
 
 config TEST_EXTRA_STACK_SIZE
 	default 1024 if SMP
