@@ -4,6 +4,7 @@
 #
 
 zephyr_library_sources_ifdef(CONFIG_ARM_AARCH32_MMU mmu_regions.c)
+zephyr_library_sources_ifdef(CONFIG_SOC_RESET_HOOK soc.c)
 
 zephyr_include_directories(.)
 

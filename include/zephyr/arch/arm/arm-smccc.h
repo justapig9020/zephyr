@@ -1,0 +1,45 @@
+/*
+ * Copyright 2026 Realtek
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef ZEPHYR_INCLUDE_ARCH_ARM_SMCCC_H_
+#define ZEPHYR_INCLUDE_ARCH_ARM_SMCCC_H_
+
+/*
+ * Result from SMC/HVC call
+ * @a0-a7 result values from registers 0 to 7
+ */
+struct arm_smccc_res {
+	unsigned long a0;
+	unsigned long a1;
+	unsigned long a2;
+	unsigned long a3;
+	unsigned long a4;
+	unsigned long a5;
+	unsigned long a6;
+	unsigned long a7;
+};
+
+typedef struct arm_smccc_res arm_smccc_res_t;
+
+enum arm_smccc_conduit {
+	SMCCC_CONDUIT_NONE,
+	SMCCC_CONDUIT_SMC,
+	SMCCC_CONDUIT_HVC,
+};
+
+void arm_smccc_hvc(unsigned long a0, unsigned long a1,
+		   unsigned long a2, unsigned long a3,
+		   unsigned long a4, unsigned long a5,
+		   unsigned long a6, unsigned long a7,
+		   struct arm_smccc_res *res);
+
+void arm_smccc_smc(unsigned long a0, unsigned long a1,
+		   unsigned long a2, unsigned long a3,
+		   unsigned long a4, unsigned long a5,
+		   unsigned long a6, unsigned long a7,
+		   struct arm_smccc_res *res);
+
+#endif /* ZEPHYR_INCLUDE_ARCH_ARM_SMCCC_H_ */

@@ -1,0 +1,24 @@
+/*
+ * Copyright 2026 Realtek
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "qemu_cortex_a53_aarch32.dts"
+
+/ {
+	cpus {
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <1>;
+			i-cache-line-size = <64>;
+			d-cache-line-size = <64>;
+			enable-method = "psci";
+		};
+	};
+};
+
+&{/psci} {
+	method = "smc";
+};

@@ -233,6 +233,20 @@ EL1_Reset_Handler:
     ldr r0, =arm_cpu_boot_params
 
 #if CONFIG_MP_MAX_NUM_CPUS > 1
+#ifdef CONFIG_PM_CPU_OPS_PSCI
+    /*
+     * PSCI only starts the boot CPU during the initial BL33 handoff.
+     * Secondary CPUs reach __start later via CPU_ON(), after the primary
+     * has published the target MPID in arm_cpu_boot_params.mpid.
+     */
+    get_cpu_logic_id r1, r2, r3, r4 // r1: MPID, r2: logic id
+
+    ldr r3, [r0, #BOOT_PARAM_MPID_OFFSET]
+    cmn r3, #1
+    beq _primary_core
+
+    b _secondary_core
+#else
     /*
      * This code uses voting locks, like arch/arm64/core/reset.S, to determine primary CPU.
      */
@@ -278,6 +292,7 @@ EL1_Reset_Handler:
     cmp r3, r1
     beq _primary_core
     /* fallthrough secondary */
+#endif /* CONFIG_PM_CPU_OPS_PSCI */
 
     /* loop until our turn comes */
 _secondary_core:
