@@ -40,6 +40,11 @@
 		#clock-cells = <0>;
 	};
 
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "hvc";
+	};
+
 	soc {
 		interrupt-parent = <&gic>;
 

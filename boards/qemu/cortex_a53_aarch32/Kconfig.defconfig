@@ -3,6 +3,12 @@
 
 if BOARD_QEMU_CORTEX_A53_AARCH32
 
+config BUILD_WITH_TFA
+	default y
+
+config BUILD_OUTPUT_BIN
+	default y
+
 if QEMU_ICOUNT
 
 config QEMU_ICOUNT_SHIFT

@@ -56,6 +56,13 @@ config AARCH32_ARMV8_A
 	  This option signifies the use of an Armv8-A processor running in
 	  AArch32 execution state.
 
+config ARMV8_A_NS
+	bool "ARMv8-A Normal World (Non-Secure world of TrustZone)"
+	depends on AARCH32_ARMV8_A
+	help
+	  This option signifies that Zephyr is entered in TrustZone
+	  Non-Secure state while running in AArch32 execution state.
+
 config ARMV7_EXCEPTION_STACK_SIZE
 	int "Undefined Instruction and Abort stack size (in bytes)"
 	default 256
