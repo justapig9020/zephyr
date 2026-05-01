@@ -47,12 +47,12 @@ GTEXT(soc_reset_hook)
  * setting up the system for running C code.
  *
  */
-#if defined(CONFIG_AARCH32_ARMV8_R)
+#if defined(CONFIG_AARCH32_ARMV8_R) || defined(CONFIG_AARCH32_ARMV8_A)
 /*
- * ARMv8-R AArch32 cores use RVBAR (Reset Vector Base Address Register) to
- * determine the CPU start address on reset.  RVBAR only stores bits [31:5];
- * bits [4:0] are RES0.  This means the reset
- * vector address is implicitly rounded down to a 32-byte boundary.
+ * Armv8 AArch32 cores use RVBAR (Reset Vector Base Address Register) to
+ * determine the CPU start address on reset. RVBAR only stores bits [31:5];
+ * bits [4:0] are RES0. This means the reset vector address is implicitly
+ * rounded down to a 32-byte boundary.
  *
  * If __start is not 32-byte aligned, any firmware or boot-loader that
  * programs RVBAR from the ELF entry point will silently truncate the
@@ -66,7 +66,7 @@ __start:
 SECTION_SUBSEC_FUNC(TEXT, _reset_section, z_arm_reset)
 SECTION_SUBSEC_FUNC(TEXT, _reset_section, __start)
 #endif
-#if defined(CONFIG_AARCH32_ARMV8_R)
+#if defined(CONFIG_AARCH32_ARMV8_R) || defined(CONFIG_AARCH32_ARMV8_A)
     /* Check if we are starting in HYP mode */
     mrs r0, cpsr
     and r0, r0, #MODE_MASK
@@ -80,9 +80,13 @@ SECTION_SUBSEC_FUNC(TEXT, _reset_section, __start)
      * Fast Interrupts need to be enabled.
      */
 
+#if defined(CONFIG_AARCH32_ARMV8_R)
     /* Init HACTLR: Enable EL1 access to all IMP DEF registers */
     ldr r0, =HACTLR_INIT
     mcr p15, 4, r0, c1, c0, 1
+#endif
+
+    /* TODO: Add secure monitor to SVC downgrade support when a board needs it. */
 
    /* Go to SVC mode */
     mrs r0, cpsr

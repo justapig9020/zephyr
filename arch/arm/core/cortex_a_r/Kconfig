@@ -39,6 +39,14 @@ config ARMV7_A
 	select ATOMIC_OPERATIONS_BUILTIN
 	select ISA_ARM
 
+config AARCH32_ARMV8_A
+	bool
+	select ARMV7_A
+	select ARM_GENERIC_TIMER_CP15
+	help
+	  This option signifies the use of an Armv8-A processor running in
+	  AArch32 execution state.
+
 config ARMV7_EXCEPTION_STACK_SIZE
 	int "Undefined Instruction and Abort stack size (in bytes)"
 	default 256
