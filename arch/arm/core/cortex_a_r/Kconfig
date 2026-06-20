@@ -38,6 +38,7 @@ config CPU_CORTEX_A53_AARCH32
 	select AARCH32_ARMV8_A
 	select CPU_HAS_ICACHE
 	select CPU_HAS_DCACHE
+	select VFP_DP_D32
 	help
 	  This option signifies the use of a Cortex-A53 CPU running in AArch32.
 

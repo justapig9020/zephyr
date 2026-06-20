@@ -11,10 +11,18 @@ config CPU_HAS_VFP
 	bool
 	select CPU_HAS_FPU
 	imply FPU
-	imply FPU_SHARING
+	imply FPU_SHARING if ARM_VFP_SHARING_SUPPORTED
 	help
 	  This option signifies the support for a Vectored Floating-Point (VFP)
 	  coprocessor.
+
+config ARM_VFP_SHARING_SUPPORTED
+	bool
+	default n if (CPU_AARCH32_CORTEX_A || CPU_AARCH32_CORTEX_R) && USE_SWITCH
+	default y
+	help
+	  This option indicates that VFP register sharing is supported by the
+	  selected ARM core and context switching path.
 
 config CPU_HAS_NEON
 	bool

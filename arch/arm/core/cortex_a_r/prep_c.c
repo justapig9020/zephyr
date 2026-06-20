@@ -26,6 +26,7 @@
 #include <zephyr/arch/cache.h>
 #include <zephyr/arch/common/xip.h>
 #include <zephyr/arch/common/init.h>
+#include <cortex_a_r/fpu.h>
 
 #if defined(CONFIG_ARMV7_R) || defined(CONFIG_ARMV7_A)
 #include <cortex_a_r/stack.h>
@@ -40,7 +41,7 @@ extern int z_arm_mmu_init(void);
 
 #if defined(CONFIG_CPU_HAS_FPU)
 
-static inline void z_arm_floating_point_init(void)
+void z_arm_floating_point_init(void)
 {
 #if defined(CONFIG_FPU)
 	uint32_t reg_val = 0;

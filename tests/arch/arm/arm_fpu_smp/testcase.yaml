@@ -1,0 +1,10 @@
+common:
+  tags:
+    - arm
+    - fpu
+    - smp
+  filter: CONFIG_SMP and CONFIG_FPU and not CONFIG_FPU_SHARING
+tests:
+  arch.arm.fpu_smp.unshared:
+    platform_allow:
+      - qemu_cortex_a53_aarch32/qemu_cortex_a53_aarch32/smp
