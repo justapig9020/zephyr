@@ -24,6 +24,9 @@ GTEXT(z_arm_svc)
 GTEXT(z_arm_context_switch)
 GTEXT(z_do_kernel_oops)
 GTEXT(z_arm_do_syscall)
+#if defined(CONFIG_FPU_SHARING)
+GTEXT(z_arm_fpu_thread_context_switch)
+#endif
 
 /*
  * Routine to handle context switches
@@ -48,6 +51,12 @@ SECTION_FUNC(TEXT, z_arm_context_switch)
 	/* retrieve next thread's exception depth */
 	ldrb r3, [r0, #_thread_offset_to_exception_depth]
 	strb r3, [r2, #_cpu_offset_to_exc_depth]
+
+#if defined(CONFIG_FPU_SHARING)
+	push {r0-r3, r12, lr}
+	bl z_arm_fpu_thread_context_switch
+	pop {r0-r3, r12, lr}
+#endif
 
 	/* save old thread into switch handle which is required by
 	 * z_sched_switch_spin().

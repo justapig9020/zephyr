@@ -56,6 +56,11 @@
 	cps #MODE_SYS
 	push {r0-r3, r12, lr}
 
+#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_USE_SWITCH)
+	mov r0, #0
+	vmsr fpexc, r0
+#endif
+
 	/* TODO: EXTRA_EXCEPTION_INFO */
 	mov r0, sp
 

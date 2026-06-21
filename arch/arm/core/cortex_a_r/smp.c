@@ -8,6 +8,7 @@
 #include <zephyr/arch/arm/cortex_a_r/lib_helpers.h>
 #include <zephyr/drivers/interrupt_controller/gic.h>
 #include <zephyr/drivers/pm_cpu_ops.h>
+#include <zephyr/irq.h>
 #include <cortex_a_r/fpu.h>
 #include <ipi.h>
 #include "boot.h"
@@ -200,9 +201,9 @@ void arch_secondary_cpu_init(void)
 
 	irq_enable(SGI_SCHED_IPI);
 
-	/*! TODO: FPU irq
-	 *  \todo FPU irq
-	 */
+#ifdef CONFIG_FPU_SHARING
+	irq_enable(SGI_FPU_IPI);
+#endif
 #endif
 
 	soc_per_core_init_hook();
@@ -269,6 +270,20 @@ void arch_sched_directed_ipi(uint32_t cpu_bitmap)
 	send_ipi(SGI_SCHED_IPI, cpu_bitmap);
 }
 
+#ifdef CONFIG_FPU_SHARING
+void flush_fpu_ipi_handler(const void *unused)
+{
+	ARG_UNUSED(unused);
+
+	arch_flush_local_fpu();
+}
+
+void arch_flush_fpu_ipi(unsigned int cpu)
+{
+	send_ipi(SGI_FPU_IPI, BIT(cpu));
+}
+#endif
+
 int arch_smp_init(void)
 {
 	cpu_map[0] = MPIDR_TO_CORE(GET_MPIDR());
@@ -279,6 +294,11 @@ int arch_smp_init(void)
 	 */
 	IRQ_CONNECT(SGI_SCHED_IPI, IRQ_DEFAULT_PRIORITY, sched_ipi_handler, NULL, 0);
 	irq_enable(SGI_SCHED_IPI);
+
+#ifdef CONFIG_FPU_SHARING
+	IRQ_CONNECT(SGI_FPU_IPI, IRQ_DEFAULT_PRIORITY, flush_fpu_ipi_handler, NULL, 0);
+	irq_enable(SGI_FPU_IPI);
+#endif
 
 	return 0;
 }

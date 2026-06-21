@@ -68,6 +68,19 @@ struct _preempt_float {
 	float  s31;
 #endif /* !_ARM_M_SWITCH */
 };
+
+#if defined(CONFIG_USE_SWITCH) && \
+	(defined(CONFIG_CPU_AARCH32_CORTEX_A) || defined(CONFIG_CPU_AARCH32_CORTEX_R))
+struct z_arm_vfp_context {
+#ifdef CONFIG_VFP_FEATURE_REGS_S64_D32
+	uint64_t d[32];
+#else
+	uint32_t s[32];
+#endif
+	uint32_t fpscr;
+	uint32_t fpexc;
+};
+#endif
 #endif
 
 #if defined(CONFIG_ARM_PAC_PER_THREAD)
@@ -101,6 +114,10 @@ struct _thread_arch {
 	 * in its exception stack frame.
 	 */
 	struct _preempt_float  preempt_float;
+#if defined(CONFIG_USE_SWITCH) && \
+	(defined(CONFIG_CPU_AARCH32_CORTEX_A) || defined(CONFIG_CPU_AARCH32_CORTEX_R))
+	struct z_arm_vfp_context saved_fp_context;
+#endif
 #endif
 
 #if defined(CONFIG_CPU_AARCH32_CORTEX_A) || defined(CONFIG_CPU_AARCH32_CORTEX_R)
