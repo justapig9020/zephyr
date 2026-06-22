@@ -83,6 +83,11 @@ extern FUNC_NORETURN void z_arm_userspace_enter(k_thread_entry_t user_entry,
 
 extern void z_arm_fatal_error(unsigned int reason, const struct arch_esf *esf);
 
+#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_USE_SWITCH)
+void arch_flush_local_fpu(void);
+void arch_flush_fpu_ipi(unsigned int cpu);
+#endif
+
 #endif /* _ASMLANGUAGE */
 
 #ifdef __cplusplus

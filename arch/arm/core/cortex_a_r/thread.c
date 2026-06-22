@@ -147,7 +147,7 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	iframe->xpsr |= T_BIT;
 #endif /* CONFIG_COMPILER_ISA_THUMB2 */
 
-#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING)
+#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING) && !defined(CONFIG_USE_SWITCH)
 	iframe = (struct __basic_sf *)
 		((uintptr_t)iframe - sizeof(struct __fpu_sf));
 	memset(iframe, 0, sizeof(struct __fpu_sf));
@@ -402,7 +402,7 @@ uint32_t z_check_thread_stack_fail(const uint32_t fault_addr, const uint32_t psp
 }
 #endif /* CONFIG_MPU_STACK_GUARD || CONFIG_USERSPACE */
 
-#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING)
+#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING) && !defined(CONFIG_USE_SWITCH)
 int arch_float_disable(struct k_thread *thread)
 {
 	if (thread != _current) {

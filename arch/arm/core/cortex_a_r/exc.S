@@ -239,7 +239,17 @@ SECTION_SUBSEC_FUNC(TEXT, __exc, z_arm_data_abort)
 #else
 
 GTEXT(z_arm_cortex_ar_exit_exc)
+#if defined(CONFIG_FPU_SHARING)
+GTEXT(z_arm_fpu_exit_exc)
+#endif
 SECTION_SUBSEC_FUNC(TEXT, _HandlerModeExit, z_arm_cortex_ar_exit_exc)
+	mov r3, #1
+	b z_arm_cortex_ar_exit_exc_common
+
+z_arm_cortex_ar_exit_exc_no_fpu:
+	mov r3, #0
+
+z_arm_cortex_ar_exit_exc_common:
 
 	/* Note:
 	 * This function is expected to be *always* called with
@@ -252,6 +262,15 @@ SECTION_SUBSEC_FUNC(TEXT, _HandlerModeExit, z_arm_cortex_ar_exit_exc)
 	sub r1, r1, #1
 	strb r1, [r2, #_cpu_offset_to_exc_depth]
 
+#if defined(CONFIG_FPU_SHARING)
+	cmp r3, #0
+	beq z_arm_cortex_ar_exit_exc_restore
+	push {r0-r3, r12, lr}
+	bl z_arm_fpu_exit_exc
+	pop {r0-r3, r12, lr}
+#endif
+
+z_arm_cortex_ar_exit_exc_restore:
 	/*
 	 * Restore r0-r3, r12, lr, lr_und and spsr_und from the exception stack
 	 * and return to the current thread.
@@ -278,7 +297,20 @@ SECTION_SUBSEC_FUNC(TEXT, __exc, z_arm_undef_instruction)
 	subne lr, #2	/* Thumb (T_BIT) */
 	pop {r0}
 
-	z_arm_cortex_ar_enter_exc
+	/*
+	 * Enter the exception without disabling FPU access: z_arm_fpu_trap()
+	 * must observe the faulting context's FPEXC.EN to tell a real
+	 * undefined instruction apart from a lazy FPU-access trap. Clearing
+	 * it here would make every undefined instruction look like an FPU
+	 * trap and loop forever instead of escalating to a fault.
+	 */
+	z_arm_cortex_ar_enter_exc disable_fpu=0
+#if defined(CONFIG_FPU_SHARING)
+	bl z_arm_fault_undef_instruction_fp
+	cmp r0, #0
+	/* The handled FPU trap must retry with FP access left as configured. */
+	beq z_arm_cortex_ar_exit_exc_no_fpu
+#endif
 	bl z_arm_fault_undef_instruction
 	b z_arm_cortex_ar_exit_exc
 

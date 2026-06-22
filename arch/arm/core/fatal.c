@@ -26,7 +26,7 @@ static void esf_dump(const struct arch_esf *esf)
 	EXCEPTION_DUMP("r3/a4:  0x%08x r12/ip:  0x%08x r14/lr:  0x%08x",
 		esf->basic.a4, esf->basic.ip, esf->basic.lr);
 	EXCEPTION_DUMP(" xpsr:  0x%08x", esf->basic.xpsr);
-#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING)
+#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING) && !defined(CONFIG_USE_SWITCH)
 	for (int i = 0; i < ARRAY_SIZE(esf->fpu.s); i += 4) {
 		EXCEPTION_DUMP("s[%2d]:  0x%08x  s[%2d]:  0x%08x"
 			"  s[%2d]:  0x%08x  s[%2d]:  0x%08x",

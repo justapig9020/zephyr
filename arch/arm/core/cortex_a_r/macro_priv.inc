@@ -47,7 +47,7 @@
         and \rreg0, #TPIDRURO_CURR_CPU
 .endm
 
-.macro z_arm_cortex_ar_enter_exc
+.macro z_arm_cortex_ar_enter_exc disable_fpu=1
 	/*
 	 * Store r0-r3, r12, lr into the stack to construct an exception
 	 * stack frame.
@@ -55,6 +55,20 @@
 	srsdb sp!, #MODE_SYS
 	cps #MODE_SYS
 	push {r0-r3, r12, lr}
+
+#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_USE_SWITCH)
+	/*
+	 * Disable FPU access in the handler: the FP registers still hold the
+	 * current FPU owner's unsaved context, so handler code touching the
+	 * FPU would corrupt it. Forcing a trap saves the owner's state first.
+	 */
+	.if \disable_fpu
+	mov r0, #0
+	vmsr fpexc, r0
+	/* Synchronize the FPEXC write so the disable is in effect below. */
+	isb
+	.endif
+#endif
 
 	/* TODO: EXTRA_EXCEPTION_INFO */
 	mov r0, sp

@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/arch/arm/cortex_a_r/lib_helpers.h>
 #include <zephyr/drivers/interrupt_controller/gic.h>
+#include <zephyr/irq.h>
 #include <ipi.h>
 #include "boot.h"
 #include "zephyr/cache.h"
@@ -206,9 +207,9 @@ void arch_secondary_cpu_init(void)
 
 	irq_enable(SGI_SCHED_IPI);
 
-	/*! TODO: FPU irq
-	 *  \todo FPU irq
-	 */
+#ifdef CONFIG_FPU_SHARING
+	irq_enable(SGI_FPU_IPI);
+#endif
 #endif
 
 #ifdef CONFIG_SOC_PER_CORE_INIT_HOOK
@@ -277,6 +278,45 @@ void arch_sched_directed_ipi(uint32_t cpu_bitmap)
 	send_ipi(SGI_SCHED_IPI, cpu_bitmap);
 }
 
+#ifdef CONFIG_FPU_SHARING
+void flush_fpu_ipi_handler(const void *unused)
+{
+	ARG_UNUSED(unused);
+
+	/*
+	 * _isr_wrapper re-enables IRQs around ISR callbacks (cpsie i) to allow
+	 * nesting, so this handler runs with interrupts enabled. The FPU flush
+	 * mutates FPEXC and the per-CPU fpu_owner non-atomically, which must not
+	 * be preempted, so mask interrupts for the duration of the flush.
+	 */
+	unsigned int key = arch_irq_lock();
+
+	arch_flush_local_fpu();
+	arch_irq_unlock(key);
+}
+
+void arch_flush_fpu_ipi(unsigned int cpu)
+{
+	send_ipi(SGI_FPU_IPI, BIT(cpu));
+}
+
+/*
+ * Called from the k_spin_lock() busy-wait loop, which spins with IRQs already
+ * masked. A remote CPU holding the FPU we need to flush signals us via the FPU
+ * IPI, but that IPI cannot be delivered while we spin with IRQs off, so drain
+ * it here by hand to avoid a cross-CPU deadlock. IRQs are masked by the caller,
+ * so arch_flush_local_fpu() (which mutates FPEXC and fpu_owner non-atomically)
+ * is safe to call directly. Mirrors arch_spin_relax() on AArch64.
+ */
+void arch_spin_relax(void)
+{
+	if (arm_gic_irq_is_pending(SGI_FPU_IPI)) {
+		arm_gic_irq_clear_pending(SGI_FPU_IPI);
+		arch_flush_local_fpu();
+	}
+}
+#endif
+
 int arch_smp_init(void)
 {
 	cpu_map[0] = MPIDR_TO_CORE(GET_MPIDR());
@@ -287,6 +327,11 @@ int arch_smp_init(void)
 	 */
 	IRQ_CONNECT(SGI_SCHED_IPI, IRQ_DEFAULT_PRIORITY, sched_ipi_handler, NULL, 0);
 	irq_enable(SGI_SCHED_IPI);
+
+#ifdef CONFIG_FPU_SHARING
+	IRQ_CONNECT(SGI_FPU_IPI, IRQ_DEFAULT_PRIORITY, flush_fpu_ipi_handler, NULL, 0);
+	irq_enable(SGI_FPU_IPI);
+#endif
 
 	return 0;
 }

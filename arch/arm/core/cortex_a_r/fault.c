@@ -11,6 +11,7 @@
 #include <kernel_internal.h>
 #include <zephyr/arch/common/exc_handle.h>
 #include <zephyr/logging/log.h>
+#include <cortex_a_r/fpu.h>
 #if defined(CONFIG_GDBSTUB)
 #include <zephyr/arch/arm/gdbstub.h>
 #include <zephyr/debug/gdbstub.h>
@@ -171,7 +172,7 @@ static uint32_t dump_fault(uint32_t status, uint32_t addr)
 }
 #endif
 
-#if defined(CONFIG_FPU_SHARING)
+#if defined(CONFIG_FPU_SHARING) && !defined(CONFIG_USE_SWITCH)
 
 static ALWAYS_INLINE void z_arm_fpu_caller_save(struct __fpu_sf *fpu)
 {
@@ -261,6 +262,13 @@ bool z_arm_fault_undef_instruction_fp(void)
 }
 #endif
 
+#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_USE_SWITCH)
+bool z_arm_fault_undef_instruction_fp(struct arch_esf *esf)
+{
+	return z_arm_fpu_trap(esf);
+}
+#endif
+
 /**
  * @brief Undefined instruction fault handler
  *
@@ -268,7 +276,7 @@ bool z_arm_fault_undef_instruction_fp(void)
  */
 bool z_arm_fault_undef_instruction(struct arch_esf *esf)
 {
-#if defined(CONFIG_FPU_SHARING)
+#if defined(CONFIG_FPU_SHARING) && !defined(CONFIG_USE_SWITCH)
 	/*
 	 * This is a true undefined instruction and we will be crashing
 	 * so save away the VFP registers.

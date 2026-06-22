@@ -12,6 +12,9 @@
 /* Per CPU architecture specifics */
 struct _cpu_arch {
 	int8_t exc_depth;
+#ifdef CONFIG_FPU_SHARING
+	atomic_ptr_val_t fpu_owner;
+#endif
 };
 
 #else
