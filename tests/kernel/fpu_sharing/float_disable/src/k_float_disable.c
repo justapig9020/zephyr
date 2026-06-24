@@ -28,6 +28,7 @@ struct k_thread usr_fp_thread;
 K_THREAD_STACK_DEFINE(usr_fp_thread_stack, STACKSIZE);
 
 ZTEST_BMEM static volatile int test_ret = TC_PASS;
+ZTEST_BMEM static volatile float fp_sink;
 
 static void usr_fp_thread_entry_1(void *p1, void *p2, void *p3)
 {
@@ -132,6 +133,11 @@ ZTEST(k_float_disable, test_k_float_disable_syscall)
 {
 	test_ret = TC_PASS;
 
+	if (IS_ENABLED(CONFIG_SMP) && (CONFIG_MP_MAX_NUM_CPUS > 1)) {
+		TC_PRINT("This syscall scheduling test is covered by non-SMP scenarios.\n");
+		ztest_test_skip();
+	}
+
 	k_thread_priority_set(k_current_get(), PRIORITY);
 
 	/* Create an FP-capable User thread with the same cooperative
@@ -172,6 +178,140 @@ ZTEST(k_float_disable, test_k_float_disable_syscall)
 	/* Check skipped for x86 without support for Lazy FP Sharing */
 #endif
 }
+
+#if defined(CONFIG_SMP) && (CONFIG_MP_MAX_NUM_CPUS > 1) && \
+	defined(CONFIG_SCHED_CPU_MASK) && K_FLOAT_DISABLE_ANY_THREAD && \
+	(defined(CONFIG_ARM64) || defined(CONFIG_ARM))
+
+struct k_thread remote_fp_thread;
+K_THREAD_STACK_DEFINE(remote_fp_thread_stack, STACKSIZE);
+struct k_thread remote_controller_thread;
+K_THREAD_STACK_DEFINE(remote_controller_thread_stack, STACKSIZE);
+
+static K_SEM_DEFINE(remote_fp_loaded, 0, 1);
+static K_SEM_DEFINE(remote_fp_release, 0, 1);
+static K_SEM_DEFINE(remote_controller_done, 0, 1);
+
+static int remote_controller_result;
+
+static void remote_fp_thread_entry(void *p1, void *p2, void *p3)
+{
+	volatile float a = 1.25f;
+	volatile float b = 2.5f;
+
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	fp_sink = (a * b) + 0.5f;
+	k_sem_give(&remote_fp_loaded);
+
+	if (k_sem_take(&remote_fp_release, K_SECONDS(5)) != 0) {
+		test_ret = TC_FAIL;
+	}
+}
+
+static void remote_controller_thread_entry(void *p1, void *p2, void *p3)
+{
+	k_tid_t tid;
+	int ret;
+	bool release_target = false;
+
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	tid = k_thread_create(&remote_fp_thread, remote_fp_thread_stack,
+			      STACKSIZE, remote_fp_thread_entry,
+			      NULL, NULL, NULL, PRIORITY, K_FP_OPTS,
+			      K_FOREVER);
+
+	ret = k_thread_cpu_pin(tid, 1);
+	if (ret != 0) {
+		remote_controller_result = ret;
+		goto done;
+	}
+
+	k_thread_start(tid);
+
+	ret = k_sem_take(&remote_fp_loaded, K_SECONDS(5));
+	if (ret != 0) {
+		remote_controller_result = ret;
+		goto abort_target;
+	}
+	release_target = true;
+
+	ret = k_float_disable(tid);
+	if (ret != 0) {
+		remote_controller_result = ret;
+		goto release_target;
+	}
+
+release_target:
+	k_sem_give(&remote_fp_release);
+	release_target = false;
+
+	ret = k_thread_join(tid, K_SECONDS(5));
+	if (ret != 0) {
+		k_thread_abort(tid);
+	}
+
+	if ((remote_controller_result == 0) && (ret != 0)) {
+		remote_controller_result = ret;
+	}
+
+	if ((remote_controller_result == 0) && (test_ret != TC_PASS)) {
+		remote_controller_result = -EIO;
+	}
+
+	goto done;
+
+abort_target:
+	k_thread_abort(tid);
+	(void)k_thread_join(tid, K_SECONDS(5));
+
+done:
+	if (release_target) {
+		k_sem_give(&remote_fp_release);
+	}
+	k_sem_give(&remote_controller_done);
+}
+
+ZTEST(k_float_disable, test_k_float_disable_remote_stale_owner)
+{
+	k_tid_t tid;
+	int ret;
+
+	test_ret = TC_PASS;
+	remote_controller_result = 0;
+	k_sem_reset(&remote_fp_loaded);
+	k_sem_reset(&remote_fp_release);
+	k_sem_reset(&remote_controller_done);
+
+	tid = k_thread_create(&remote_controller_thread,
+			      remote_controller_thread_stack, STACKSIZE,
+			      remote_controller_thread_entry,
+			      NULL, NULL, NULL, PRIORITY, 0, K_FOREVER);
+
+	ret = k_thread_cpu_pin(tid, 0);
+	zassert_ok(ret, "failed to pin controller to CPU0");
+
+	k_thread_start(tid);
+
+	ret = k_sem_take(&remote_controller_done, K_SECONDS(10));
+	if (ret != 0) {
+		k_thread_abort(tid);
+	}
+
+	zassert_ok(ret, "controller thread did not finish");
+
+	ret = k_thread_join(tid, K_SECONDS(5));
+	zassert_ok(ret, "controller thread did not join");
+
+	zassert_ok(remote_controller_result, "remote stale-owner disable failed");
+}
+
+#endif
 
 #if defined(CONFIG_ARM) && defined(CONFIG_DYNAMIC_INTERRUPTS)
 
