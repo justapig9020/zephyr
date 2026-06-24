@@ -1,0 +1,16 @@
+common:
+  tags:
+    - fpu
+    - kernel
+    - smp
+  platform_allow:
+    - qemu_cortex_a53_aarch32/qemu_cortex_a53_aarch32/smp
+  filter: CONFIG_SMP and CONFIG_FPU and CONFIG_SCHED_CPU_MASK and
+          CONFIG_MP_MAX_NUM_CPUS > 1
+tests:
+  kernel.fpu_sharing.smp.per_cpu_unshared:
+    extra_configs:
+      - CONFIG_FPU_SHARING=n
+  kernel.fpu_sharing.smp.shared_migration:
+    extra_configs:
+      - CONFIG_FPU_SHARING=y
