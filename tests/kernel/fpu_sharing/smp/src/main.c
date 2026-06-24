@@ -57,6 +57,7 @@
 
 #define STACK_SIZE 2048
 #define PIN_WAIT_LIMIT 1000
+#define RECIPROCAL_MIGRATION_ROUNDS 16
 
 struct fpu_thread_result {
 	int expected_cpu;
@@ -80,6 +81,23 @@ static unsigned int migration_src_cpu;
 static unsigned int migration_dst_cpu;
 static struct fp_register_set migration_input;
 static struct fp_register_set migration_output;
+
+struct reciprocal_migration_state {
+	unsigned int src_cpu;
+	unsigned int dst_cpu;
+	int observed_cpu;
+	int result;
+	struct fp_register_set input;
+	struct fp_register_set output;
+};
+
+static struct k_thread reciprocal_threads[2];
+static K_THREAD_STACK_ARRAY_DEFINE(reciprocal_stacks, 2, STACK_SIZE);
+static K_SEM_DEFINE(reciprocal_loaded, 0, 2);
+static K_SEM_DEFINE(reciprocal_continue, 0, 2);
+static K_SEM_DEFINE(reciprocal_done, 0, 2);
+static struct reciprocal_migration_state reciprocal_state[2];
+
 #endif
 
 static int current_cpu_id(void)
@@ -295,6 +313,162 @@ ZTEST(fpu_sharing_smp, test_shared_fpu_survives_cpu_migration)
 
 		zassert_ok(ret, "FP migration from CPU %u to CPU %u failed: %d",
 			   src_cpu, dst_cpu, ret);
+	}
+}
+
+static void reciprocal_migration_thread_entry(void *p1, void *p2, void *p3)
+{
+	uintptr_t index = (uintptr_t)p1;
+	struct reciprocal_migration_state *state = &reciprocal_state[index];
+
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	state->observed_cpu = current_cpu_id();
+	if (state->observed_cpu != state->src_cpu) {
+		state->result = -EINVAL;
+		k_sem_give(&reciprocal_loaded);
+		k_sem_give(&reciprocal_done);
+		return;
+	}
+
+	_load_all_float_registers(&state->input);
+	k_sem_give(&reciprocal_loaded);
+
+	if (k_sem_take(&reciprocal_continue, K_SECONDS(5)) != 0) {
+		state->result = -ETIMEDOUT;
+		k_sem_give(&reciprocal_done);
+		return;
+	}
+
+	state->observed_cpu = current_cpu_id();
+	if (state->observed_cpu != state->dst_cpu) {
+		state->result = -EINVAL;
+		k_sem_give(&reciprocal_done);
+		return;
+	}
+
+	_store_all_float_registers(&state->output);
+	if (memcmp(&state->output, &state->input, SIZEOF_FP_REGISTER_SET) != 0) {
+		state->result = -EFAULT;
+	}
+
+	k_sem_give(&reciprocal_done);
+}
+
+static void cleanup_reciprocal_threads(k_tid_t tids[2])
+{
+	k_sem_give(&reciprocal_continue);
+	k_sem_give(&reciprocal_continue);
+
+	for (unsigned int i = 0; i < 2; i++) {
+		if (tids[i] != NULL) {
+			k_thread_abort(tids[i]);
+			(void)k_thread_join(tids[i], K_SECONDS(5));
+		}
+	}
+}
+
+static int reciprocal_migration_round(unsigned int round)
+{
+	k_tid_t tids[2] = { NULL, NULL };
+	int ret = 0;
+
+	k_sem_reset(&reciprocal_loaded);
+	k_sem_reset(&reciprocal_continue);
+	k_sem_reset(&reciprocal_done);
+
+	for (unsigned int i = 0; i < 2; i++) {
+		struct reciprocal_migration_state *state = &reciprocal_state[i];
+
+		state->src_cpu = i;
+		state->dst_cpu = 1U - i;
+		state->observed_cpu = -1;
+		state->result = 0;
+		fill_fp_pattern(&state->input, 0x40u + round * 0x10u + i * 0x04u);
+		memset(&state->output, 0, sizeof(state->output));
+
+		tids[i] = k_thread_create(&reciprocal_threads[i],
+					  reciprocal_stacks[i],
+					  STACK_SIZE,
+					  reciprocal_migration_thread_entry,
+					  (void *)(uintptr_t)i, NULL, NULL,
+					  K_PRIO_PREEMPT(1), K_FP_REGS,
+					  K_FOREVER);
+		ret = k_thread_cpu_pin(tids[i], state->src_cpu);
+		if (ret != 0) {
+			cleanup_reciprocal_threads(tids);
+			return ret;
+		}
+	}
+
+	for (unsigned int i = 0; i < 2; i++) {
+		k_thread_start(tids[i]);
+	}
+
+	for (unsigned int i = 0; i < 2; i++) {
+		ret = k_sem_take(&reciprocal_loaded, K_SECONDS(5));
+		if (ret != 0) {
+			cleanup_reciprocal_threads(tids);
+			return ret;
+		}
+	}
+
+	for (unsigned int i = 0; i < 2; i++) {
+		if (reciprocal_state[i].result != 0) {
+			ret = reciprocal_state[i].result;
+			cleanup_reciprocal_threads(tids);
+			return ret;
+		}
+	}
+
+	for (unsigned int i = 0; i < 2; i++) {
+		ret = pin_blocked_thread(tids[i], reciprocal_state[i].dst_cpu);
+		if (ret != 0) {
+			cleanup_reciprocal_threads(tids);
+			return ret;
+		}
+	}
+
+	k_sem_give(&reciprocal_continue);
+	k_sem_give(&reciprocal_continue);
+
+	for (unsigned int i = 0; i < 2; i++) {
+		ret = k_sem_take(&reciprocal_done, K_SECONDS(5));
+		if (ret != 0) {
+			cleanup_reciprocal_threads(tids);
+			return ret;
+		}
+	}
+
+	for (unsigned int i = 0; i < 2; i++) {
+		ret = k_thread_join(tids[i], K_SECONDS(5));
+		if (ret != 0) {
+			return ret;
+		}
+	}
+
+	for (unsigned int i = 0; i < 2; i++) {
+		if (reciprocal_state[i].result != 0) {
+			return reciprocal_state[i].result;
+		}
+	}
+
+	return 0;
+}
+
+ZTEST(fpu_sharing_smp, test_shared_fpu_survives_reciprocal_migration)
+{
+	unsigned int num_cpus = arch_num_cpus();
+
+	zassert_true(num_cpus > 1,
+		     "SMP reciprocal FPU migration test requires at least two CPUs");
+
+	for (unsigned int round = 0; round < RECIPROCAL_MIGRATION_ROUNDS; round++) {
+		int ret = reciprocal_migration_round(round);
+
+		zassert_ok(ret, "reciprocal FP migration round %u failed: %d",
+			   round, ret);
 	}
 }
 
