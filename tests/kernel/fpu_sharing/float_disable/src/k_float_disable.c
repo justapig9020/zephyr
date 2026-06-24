@@ -45,6 +45,15 @@ static void usr_fp_thread_entry_1(void *p1, void *p2, void *p3)
 #define K_FLOAT_DISABLE_SYSCALL_RETVAL -ENOTSUP
 #endif
 
+#if defined(CONFIG_ARM64) || \
+	(defined(CONFIG_ARM) && defined(CONFIG_CPU_AARCH32_CORTEX_A) && \
+	 defined(CONFIG_USE_SWITCH)) || \
+	(defined(CONFIG_X86) && defined(CONFIG_LAZY_FPU_SHARING))
+#define K_FLOAT_DISABLE_ANY_THREAD 1
+#else
+#define K_FLOAT_DISABLE_ANY_THREAD 0
+#endif
+
 static void usr_fp_thread_entry_2(void *p1, void *p2, void *p3)
 {
 	ARG_UNUSED(p1);
@@ -89,11 +98,12 @@ ZTEST(k_float_disable, test_k_float_disable_common)
 		usr_fp_thread.base.user_options);
 
 /*
- * ARM (Cortex-M/R) restricts k_float_disable() to the current thread only.
- * ARM64 allows disabling FPU for any thread because SMP configurations
- * require flush_owned_fpu() to manage FPU state across multiple CPUs.
+ * ARM Cortex-M and the legacy ARM arch_swap path restrict k_float_disable()
+ * to the current thread only. ARM64 and ARM Cortex-A/R arch_switch support
+ * disabling FPU for any thread because SMP configurations require
+ * flush_owned_fpu() to manage FPU state across multiple CPUs.
  */
-#if defined(CONFIG_ARM) && !defined(CONFIG_ARM64)
+#if defined(CONFIG_ARM) && !defined(CONFIG_ARM64) && !K_FLOAT_DISABLE_ANY_THREAD
 	/* Verify FP mode can only be disabled for current thread */
 	zassert_true((k_float_disable(&usr_fp_thread) == -EINVAL),
 		"k_float_disable() successful on thread other than current!");
@@ -102,7 +112,7 @@ ZTEST(k_float_disable, test_k_float_disable_common)
 	zassert_true(
 		(usr_fp_thread.base.user_options & K_FP_OPTS) != 0,
 		"usr_fp_thread FP options cleared");
-#elif defined(CONFIG_ARM64) || (defined(CONFIG_X86) && defined(CONFIG_LAZY_FPU_SHARING))
+#elif K_FLOAT_DISABLE_ANY_THREAD
 	zassert_true((k_float_disable(&usr_fp_thread) == 0),
 		"k_float_disable() failure");
 
