@@ -18,6 +18,12 @@ endif()
 if(CONFIG_FPU)
   list(APPEND ARM_C_FLAGS   -mfpu=${GCC_M_FPU})
 
+  # Cortex-A32 and similar imply the arch only via -mcpu; emit an explicit
+  # -march so the FPU hard/soft-float libgcc multilib resolves.
+  if(CONFIG_AARCH32_ARMV8_A AND CONFIG_CPU_HAS_VFP AND NOT DEFINED GCC_M_ARCH)
+    set(GCC_M_ARCH armv8-a+simd)
+  endif()
+
   if(CONFIG_DCLS AND NOT CONFIG_FP_HARDABI)
     # If the processor is equipped with VFP and configured in DCLS topology,
     # the FP "hard" ABI must be used in order to facilitate the FP register
@@ -30,6 +36,10 @@ if(CONFIG_FPU)
   elseif(CONFIG_FP_SOFTABI)
     list(APPEND ARM_C_FLAGS   -mfloat-abi=softfp)
   endif()
+endif()
+
+if(DEFINED GCC_M_ARCH)
+  list(APPEND ARM_C_FLAGS   -march=${GCC_M_ARCH})
 endif()
 
 if(CONFIG_FP16)
